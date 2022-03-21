@@ -7,35 +7,35 @@ public class DollarOneRecognizer
 {
     private int _size = 250;
 
-    public Vector2[] PreparePoints(Vector2[] points, int n, int step = 4)
+    public enum Step
+    {
+        RAW,
+        RESAMPLED,
+        ROTATED,
+        SCALED,
+        TRANSLATED
+    }
+
+    public Vector2[] PreparePoints(Vector2[] points, int n, Step step = Step.TRANSLATED)
     {
         Vector2[] copyPoints = new Vector2[points.Length];
         points.CopyTo(copyPoints, 0);
-        ;
         Vector2[] resampledPoints = ResamplePoints(copyPoints, n);
         Vector2[] rotatedPoints = RotateToZero(resampledPoints);
         Vector2[] scaledPoints = ScaleToSquare(rotatedPoints, _size);
         Vector2[] translatedToOrigin = TranslateToOrigin(scaledPoints);
 
         //Debug purpose only
-        if (step == 0)
+        switch (step)
         {
-            return points;
-        }
-
-        if (step == 1)
-        {
-            return resampledPoints;
-        }
-
-        if (step == 2)
-        {
-            return rotatedPoints;
-        }
-
-        if (step == 3)
-        {
-            return scaledPoints;
+            case Step.RAW:
+                return points;
+            case Step.RESAMPLED:
+                return resampledPoints;
+            case Step.ROTATED:
+                return rotatedPoints;
+            case Step.SCALED:
+                return scaledPoints;
         }
 
         return translatedToOrigin;
@@ -44,11 +44,10 @@ public class DollarOneRecognizer
     public (string, float) DoRecognition(Vector2[] points, int n,
         List<RecognitionManager.GestureTemplate> gestureTemplates)
     {
-        Vector2[] preparedPoints = PreparePoints(points, n, 4);
+        Vector2[] preparedPoints = PreparePoints(points, n);
         float angle = 0.5f * (-1 + Mathf.Sqrt(5));
         return Recognize(preparedPoints, gestureTemplates, 250, angle);
     }
-
 
     private Vector2[] ResamplePoints(Vector2[] points, int n)
     {
@@ -181,7 +180,9 @@ public class DollarOneRecognizer
         return newPoints.ToArray();
     }
 
-    private (string, float) Recognize(Vector2[] points, List<RecognitionManager.GestureTemplate> gestureTemplates,
+    private (string, float) Recognize(
+        Vector2[] points,
+        List<RecognitionManager.GestureTemplate> gestureTemplates,
         float size,
         float angle)
     {

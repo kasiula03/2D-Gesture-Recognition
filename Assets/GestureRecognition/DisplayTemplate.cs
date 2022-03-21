@@ -1,64 +1,25 @@
-using System;
-using System.Collections.Generic;
 using System.Linq;
-using FreeDraw;
 using UnityEngine;
 
 public class DisplayTemplate : MonoBehaviour
 {
     [SerializeField] private Texture2D drawable_texture;
-    [SerializeField] private GestureTemplates _gestureTemplates;
     [SerializeField] private bool _preparedPoints;
-    [SerializeField] private int _step;
-
-    private string _name;
-    private int _index;
 
     private Color32[] cur_colors;
-
-    private IEnumerable<RecognitionManager.GestureTemplate> _currentTemplatesByName =
-        new List<RecognitionManager.GestureTemplate>();
-
     private readonly DollarOneRecognizer _dollarOneRecognizer = new DollarOneRecognizer();
 
-    public void SetName(string name)
-    {
-        _index = 0;
-        _name = name;
-        _currentTemplatesByName = _gestureTemplates.RawTemplates.Where(template => template.Name == _name).ToArray();
-        Redraw();
-    }
 
-    public void AddIndex(int increment)
-    {
-        _index += increment;
-        _index = Math.Min(_index, _currentTemplatesByName.Count() - 1);
-        _index = Math.Max(0, _index);
-        Redraw();
-    }
-
-    private void Redraw()
-    {
-        if (_index >= 0 && _index < _currentTemplatesByName.Count())
-        {
-            Draw(_currentTemplatesByName.ElementAt(_index));
-        }
-        else
-        {
-            Clear();
-        }
-    }
-
-    private void Draw(RecognitionManager.GestureTemplate gestureTemplate)
+    public void Draw(RecognitionManager.GestureTemplate gestureTemplate, DollarOneRecognizer.Step step)
     {
         Clear();
 
         cur_colors = drawable_texture.GetPixels32();
 
         Vector2[] points = gestureTemplate.Points.Distinct().ToArray(); // For NaN
-        if (_preparedPoints)
+        if (step != DollarOneRecognizer.Step.RAW)
         {
-            points = _dollarOneRecognizer.PreparePoints(gestureTemplate.Points, 64, _step);
+            points = _dollarOneRecognizer.PreparePoints(gestureTemplate.Points, 64, step);
         }
 
         float xMin = points.Select(point => point.x).Min();
@@ -70,7 +31,7 @@ public class DisplayTemplate : MonoBehaviour
         {
             Vector2 previous = points[i - 1];
             Vector2 current = points[i];
-            if (_preparedPoints && _step == 4)
+            if (step == DollarOneRecognizer.Step.TRANSLATED)
             {
                 previous = new Vector2(previous.x.Remap(xMin, 0, xMax, xMax - xMin),
                     previous.y.Remap(yMin, 0, yMax, yMax - yMin));
@@ -84,7 +45,7 @@ public class DisplayTemplate : MonoBehaviour
         ApplyMarkedPixelChanges(drawable_texture, cur_colors);
     }
 
-    private void Clear()
+    public void Clear()
     {
         Color[] clean_colours_array = new Color[(int) drawable_texture.width * (int) drawable_texture.height];
         for (int x = 0; x < clean_colours_array.Length; x++)
@@ -149,15 +110,5 @@ public class DisplayTemplate : MonoBehaviour
     {
         texture.SetPixels32(colors);
         texture.Apply(false);
-    }
-
-    public string GeTemplateName()
-    {
-        return _name;
-    }
-
-    public int GetTemplateIndex()
-    {
-        return _index;
     }
 }
