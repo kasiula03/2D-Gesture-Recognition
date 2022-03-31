@@ -18,7 +18,7 @@ namespace FreeDraw
     public class Drawable : MonoBehaviour
     {
      
-        public event Action<Vector2 []> OnDrawFinished;
+        public event Action<DollarPoint []> OnDrawFinished;
         
         // PEN COLOUR
         public static Color Pen_Colour = Color.red; // Change these to change the default drawing settings
@@ -103,7 +103,7 @@ namespace FreeDraw
         }
 
 
-        private List<Vector2> _drawPoints = new List<Vector2>();
+        private List<DollarPoint> _drawPoints = new List<DollarPoint>();
 
         // Default brush type. Has width and colour.
         // Pass in a point in WORLD coordinates
@@ -126,7 +126,7 @@ namespace FreeDraw
                 ColourBetween(previous_drag_position, pixel_pos, Pen_Width, Pen_Colour);
             }
 
-            _drawPoints.Add(pixel_pos);
+            _drawPoints.Add(new DollarPoint(){Point = pixel_pos, StrokeIndex = _strokeIndex});
 
             ApplyMarkedPixelChanges(drawable_texture, cur_colors);
 
@@ -145,6 +145,7 @@ namespace FreeDraw
 //////////////////////////////////////////////////////////////////////////////
 
 
+        private int _strokeIndex;
         private bool _drawStarted;
 
         // This is where the magic happens.
@@ -165,11 +166,7 @@ namespace FreeDraw
                     // We're over the texture we're drawing on!
                     // Use whatever function the current brush is
                     current_brush(mouse_world_position);
-                    if (!_drawStarted)
-                    {
-                        ResetCanvas(drawable_texture);
-                        _drawStarted = true;
-                    }
+                   
                 }
 
                 else
@@ -187,27 +184,39 @@ namespace FreeDraw
             // Mouse is released
             else if (!mouse_held_down)
             {
-                if (_drawStarted)
-                {
-                    if (_drawPoints.Count > 0)
-                    {
-                        OnDrawFinished?.Invoke(_drawPoints.ToArray());
-                    }
-
-                    _drawStarted = false;
-                }
-
                 previous_drag_position = Vector2.zero;
                 no_drawing_on_current_drag = false;
+            }
+
+            if (Input.GetMouseButtonUp(0) && InRange())
+            {
+                _strokeIndex++;
+            }
+            
+            if (Input.GetKeyDown(KeyCode.Space))
+            {
+                OnDrawFinished?.Invoke(_drawPoints.ToArray());
+                previous_drag_position = Vector2.zero;
+                no_drawing_on_current_drag = false;
+                ResetCanvas(drawable_texture);
+                Debug.Log(_strokeIndex);
+                _strokeIndex = 0;
             }
 
             mouse_was_previously_held_down = mouse_held_down;
         }
 
+        private bool InRange()
+        {
+            // Convert mouse coordinates to world coordinates
+            Vector2 mouse_world_position = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+            // Check if the current mouse position overlaps our image
+            Collider2D hit = Physics2D.OverlapPoint(mouse_world_position, Drawing_Layers.value);
+            return hit != null;
+        }
 
 
-       
-        
         // Set the colour of pixels in a straight line from start_point all the way to end_point, to ensure everything inbetween is coloured
         public void ColourBetween(Vector2 start_point, Vector2 end_point, int width, Color color)
         {

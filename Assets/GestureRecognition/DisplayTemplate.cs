@@ -8,6 +8,7 @@ public class DisplayTemplate : MonoBehaviour
 
     private Color32[] cur_colors;
     private readonly DollarOneRecognizer _dollarOneRecognizer = new DollarOneRecognizer();
+    private readonly DollarPRecognizer _dollarPRecognizer = new DollarPRecognizer();
 
 
     public void Draw(RecognitionManager.GestureTemplate gestureTemplate, DollarOneRecognizer.Step step)
@@ -16,21 +17,21 @@ public class DisplayTemplate : MonoBehaviour
 
         cur_colors = drawable_texture.GetPixels32();
 
-        Vector2[] points = gestureTemplate.Points.Distinct().ToArray(); // For NaN
+        DollarPoint[] points = gestureTemplate.Points.Distinct().ToArray(); // For NaN
         if (step != DollarOneRecognizer.Step.RAW)
         {
-            points = _dollarOneRecognizer.PreparePoints(gestureTemplate.Points, 64, step);
+            points = _dollarPRecognizer.Normalize(gestureTemplate.Points, 64, step);
         }
 
-        float xMin = points.Select(point => point.x).Min();
-        float xMax = points.Select(point => point.x).Max();
-        float yMin = points.Select(point => point.y).Min();
-        float yMax = points.Select(point => point.y).Max();
+        float xMin = points.Select(point => point.Point.x).Min();
+        float xMax = points.Select(point => point.Point.x).Max();
+        float yMin = points.Select(point => point.Point.y).Min();
+        float yMax = points.Select(point => point.Point.y).Max();
 
         for (var i = 1; i < points.Length; i++)
         {
-            Vector2 previous = points[i - 1];
-            Vector2 current = points[i];
+            Vector2 previous = points[i - 1].Point;
+            Vector2 current = points[i].Point;
             if (step == DollarOneRecognizer.Step.TRANSLATED)
             {
                 previous = new Vector2(previous.x.Remap(xMin, 0, xMax, xMax - xMin),
@@ -39,7 +40,10 @@ public class DisplayTemplate : MonoBehaviour
                     current.y.Remap(yMin, 0, yMax, yMax - yMin));
             }
 
-            ColourBetween(previous, current, 2, Color.red);
+            if (points[i - 1].StrokeIndex == points[i].StrokeIndex)
+            {
+                ColourBetween(previous, current, 2, Color.red);
+            }
         }
 
         ApplyMarkedPixelChanges(drawable_texture, cur_colors);

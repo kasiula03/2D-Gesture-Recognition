@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-public class DollarOneRecognizer
+public class DollarOneRecognizer : Recognizer, IRecognizer
 {
     private int _size = 250;
 
@@ -16,14 +16,14 @@ public class DollarOneRecognizer
         TRANSLATED
     }
 
-    public Vector2[] PreparePoints(Vector2[] points, int n, Step step = Step.TRANSLATED)
+    public DollarPoint[] Normalize(DollarPoint[] points, int n, Step step = Step.TRANSLATED)
     {
-        Vector2[] copyPoints = new Vector2[points.Length];
+        DollarPoint[] copyPoints = new DollarPoint[points.Length];
         points.CopyTo(copyPoints, 0);
-        Vector2[] resampledPoints = ResamplePoints(copyPoints, n);
-        Vector2[] rotatedPoints = RotateToZero(resampledPoints);
-        Vector2[] scaledPoints = ScaleToSquare(rotatedPoints, _size);
-        Vector2[] translatedToOrigin = TranslateToOrigin(scaledPoints);
+        DollarPoint[] resampledPoints = ResamplePoints(copyPoints, n);
+        DollarPoint[] rotatedPoints = RotateToZero(resampledPoints);
+        DollarPoint[] scaledPoints = ScaleToSquare(rotatedPoints, _size);
+        DollarPoint[] translatedToOrigin = TranslateToOrigin(scaledPoints);
 
         //Debug purpose only
         switch (step)
@@ -41,99 +41,44 @@ public class DollarOneRecognizer
         return translatedToOrigin;
     }
 
-    public (string, float) DoRecognition(Vector2[] points, int n,
+    public (string, float) DoRecognition(DollarPoint[] points, int n,
         List<RecognitionManager.GestureTemplate> gestureTemplates)
     {
-        Vector2[] preparedPoints = PreparePoints(points, n);
+        DollarPoint[] preparedPoints = Normalize(points, n);
         float angle = 0.5f * (-1 + Mathf.Sqrt(5));
         return Recognize(preparedPoints, gestureTemplates, 250, angle);
     }
 
-    private Vector2[] ResamplePoints(Vector2[] points, int n)
-    {
-        float incrementValue = PathLength(points) / (n - 1);
-        float proceedDistance = 0;
-        List<Vector2> newPoints = new List<Vector2> {points[0]};
-        for (int i = 1; i < points.Length; i++)
-        {
-            Vector2 previousPoint = points[i - 1];
-            Vector2 currentPoint = points[i];
-            float distance = Vector2.Distance(previousPoint, currentPoint);
-            if (float.IsNaN(distance))
-            {
-                continue;
-            }
 
-            if (proceedDistance + distance >= incrementValue)
-            {
-                float approximatedX = previousPoint.x +
-                                      ((incrementValue - proceedDistance) / distance) *
-                                      (currentPoint.x - previousPoint.x);
-                float approximatedY = previousPoint.y +
-                                      ((incrementValue - proceedDistance) / distance) *
-                                      (currentPoint.y - previousPoint.y);
-                Vector2 approximatedPoint = new Vector2(approximatedX, approximatedY);
-                newPoints.Add(approximatedPoint);
-                points[i] = approximatedPoint;
-                proceedDistance = 0;
-            }
-            else
-            {
-                proceedDistance += distance;
-            }
-        }
-
-        if (proceedDistance > 0)
-        {
-            newPoints.Add(points[points.Length - 1]);
-        }
-
-        return newPoints.ToArray();
-    }
-
-    private float PathLength(Vector2[] points)
-    {
-        float length = 0;
-        for (int i = 1; i < points.Length; i++)
-        {
-            float distance = Vector2.Distance(points[i - 1], points[i]);
-            if (!float.IsNaN(distance))
-            {
-                length += distance;
-            }
-        }
-
-        return length;
-    }
-
-    private Vector2[] RotateToZero(Vector2[] points)
+    private DollarPoint[] RotateToZero(DollarPoint[] points)
     {
         float angle = IndicativeAngle(points);
-        List<Vector2> newPoints = RotateBy(points, -angle);
-
+        List<DollarPoint> newPoints = RotateBy(points, -angle);
         return newPoints.ToArray();
     }
 
-    private List<Vector2> RotateBy(Vector2[] points, float angle)
+    private List<DollarPoint> RotateBy(DollarPoint[] points, float angle)
     {
-        List<Vector2> newPoints = new List<Vector2>(points.Length);
+        List<DollarPoint> newPoints = new List<DollarPoint>(points.Length);
         Vector2 centroid = GetCentroid(points);
-        foreach (Vector2 point in points)
+        foreach (DollarPoint point in points)
         {
-            float rotatedX = (point.x - centroid.x) * Mathf.Cos(angle) - (point.y - centroid.y) * Mathf.Sin(angle) +
+            float rotatedX = (point.Point.x - centroid.x) * Mathf.Cos(angle) -
+                             (point.Point.y - centroid.y) * Mathf.Sin(angle) +
                              centroid.x;
-            float rotatedY = (point.x - centroid.x) * Mathf.Sin(angle) + (point.y - centroid.y) * Mathf.Cos(angle) +
+            float rotatedY = (point.Point.x - centroid.x) * Mathf.Sin(angle) +
+                             (point.Point.y - centroid.y) * Mathf.Cos(angle) +
                              centroid.y;
-            newPoints.Add(new Vector2(rotatedX, rotatedY));
+            newPoints.Add(new DollarPoint(rotatedX, rotatedY, 0));
         }
 
         return newPoints;
     }
 
-    private float IndicativeAngle(Vector2[] points)
+    private float IndicativeAngle(DollarPoint[] points)
     {
         Vector2 centroid = GetCentroid(points);
-        return Mathf.Atan2(points[0].y - centroid.y, points[0].x - centroid.x);
+        return Mathf.Atan2(points[0].Point.y - centroid.y, points[0].Point.x - centroid.x);
     }
 
     private Vector2 GetCentroid(Vector2[] points)
@@ -143,45 +88,45 @@ public class DollarOneRecognizer
         return new Vector2(centerX, centerY);
     }
 
-    private Vector2[] ScaleToSquare(Vector2[] points, float size)
+    private DollarPoint[] ScaleToSquare(DollarPoint[] points, float size)
     {
-        List<Vector2> newPoints = new List<Vector2>(points.Length);
+        List<DollarPoint> newPoints = new List<DollarPoint>(points.Length);
         Rect box = GetBoundingBox(points);
-        foreach (Vector2 point in points)
+        foreach (DollarPoint point in points)
         {
-            float scaledX = point.x * size / box.width;
-            float scaledY = point.y * size / box.height;
-            newPoints.Add(new Vector2(scaledX, scaledY));
+            float scaledX = point.Point.x * size / box.width;
+            float scaledY = point.Point.y * size / box.height;
+            newPoints.Add(new DollarPoint(scaledX, scaledY, 0));
         }
 
         return newPoints.ToArray();
     }
 
-    private Rect GetBoundingBox(Vector2[] points)
+    private Rect GetBoundingBox(DollarPoint[] points)
     {
-        float minX = points.Select(point => point.x).Min();
-        float maxX = points.Select(point => point.x).Max();
-        float minY = points.Select(point => point.y).Min();
-        float maxY = points.Select(point => point.y).Max();
+        float minX = points.Select(point => point.Point.x).Min();
+        float maxX = points.Select(point => point.Point.x).Max();
+        float minY = points.Select(point => point.Point.y).Min();
+        float maxY = points.Select(point => point.Point.y).Max();
         return new Rect(minX, minY, maxX - minX, maxY - minY);
     }
 
-    private Vector2[] TranslateToOrigin(Vector2[] points)
+    private DollarPoint[] TranslateToOrigin(DollarPoint[] points)
     {
-        List<Vector2> newPoints = new List<Vector2>(points.Length);
+        List<DollarPoint> newPoints = new List<DollarPoint>(points.Length);
         Vector2 centroid = GetCentroid(points);
-        foreach (Vector2 point in points)
+        foreach (DollarPoint point in points)
         {
-            float translatedX = point.x - centroid.x;
-            float translatedY = point.y - centroid.y;
-            newPoints.Add(new Vector2(translatedX, translatedY));
+            float translatedX = point.Point.x - centroid.x;
+            float translatedY = point.Point.y - centroid.y;
+            newPoints.Add(new DollarPoint(translatedX, translatedY, 0));
         }
 
         return newPoints.ToArray();
     }
 
     private (string, float) Recognize(
-        Vector2[] points,
+        DollarPoint[] points,
         List<RecognitionManager.GestureTemplate> gestureTemplates,
         float size,
         float angle)
@@ -191,7 +136,11 @@ public class DollarOneRecognizer
         float bestDistance = float.MaxValue;
         RecognitionManager.GestureTemplate bestTemplate = new RecognitionManager.GestureTemplate();
 
-        foreach (RecognitionManager.GestureTemplate gestureTemplate in gestureTemplates.Where(template =>
+        //Should be stored in proceesed, but for testing purpose we use RawPoints
+        IEnumerable<RecognitionManager.GestureTemplate> proceedGestures = gestureTemplates.Select(template =>
+            new RecognitionManager.GestureTemplate() {Points = Normalize(template.Points, 64), Name = template.Name});
+
+        foreach (RecognitionManager.GestureTemplate gestureTemplate in proceedGestures.Where(template =>
             template.Points.Length == points.Length))
         {
             float distance = DistanceAtBestAngle(points, gestureTemplate, -theta, theta, deltaTheta, angle);
@@ -206,7 +155,7 @@ public class DollarOneRecognizer
         return ((string, float)) (bestTemplate.Name, score);
     }
 
-    private float DistanceAtBestAngle(Vector2[] points, RecognitionManager.GestureTemplate template, float thetaA,
+    private float DistanceAtBestAngle(DollarPoint[] points, RecognitionManager.GestureTemplate template, float thetaA,
         float thetaB,
         float deltaTheta, float angle)
     {
@@ -238,19 +187,19 @@ public class DollarOneRecognizer
         return Mathf.Min(firstDistance, secondDistance);
     }
 
-    private float DistanceAtAngle(Vector2[] points, RecognitionManager.GestureTemplate template, float angle)
+    private float DistanceAtAngle(DollarPoint[] points, RecognitionManager.GestureTemplate template, float angle)
     {
-        List<Vector2> newPoints = RotateBy(points, angle);
+        List<DollarPoint> newPoints = RotateBy(points, angle);
         return PathDistance(newPoints, template.Points);
     }
 
-    private float PathDistance(List<Vector2> points, Vector2[] templatePoints)
+    private float PathDistance(List<DollarPoint> points, DollarPoint[] templatePoints)
     {
         float distance = 0;
 
         for (int i = 0; i < points.Count; i++)
         {
-            distance += Vector2.Distance(points[i], templatePoints[i]);
+            distance += Vector2.Distance(points[i].Point, templatePoints[i].Point);
         }
 
         return distance / points.Count;

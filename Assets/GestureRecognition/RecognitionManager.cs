@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using FreeDraw;
 using TMPro;
 using UnityEngine;
@@ -13,9 +14,12 @@ public class RecognitionManager : MonoBehaviour
     [SerializeField] private Button _reviewTemplates;
     [SerializeField] private TMP_InputField _templateName;
     [SerializeField] private TemplateReviewPanel _templateReviewPanel;
+    [SerializeField] private RecognitionPanel _recognitionPanel;
 
     private GestureTemplates _templates => GestureTemplates.Get();
-    private readonly DollarOneRecognizer _dollarOneRecognizer = new DollarOneRecognizer();
+    private static readonly DollarOneRecognizer _dollarOneRecognizer = new DollarOneRecognizer();
+    private static readonly DollarPRecognizer _dollarPRecognizer = new DollarPRecognizer();
+    private IRecognizer _currentRecognizer = _dollarOneRecognizer;
     private RecognizerState _state = RecognizerState.RECOGNITION;
 
     public enum RecognizerState
@@ -29,9 +33,9 @@ public class RecognitionManager : MonoBehaviour
     public struct GestureTemplate
     {
         public string Name;
-        public Vector2[] Points;
+        public DollarPoint[] Points;
 
-        public GestureTemplate(string templateName, Vector2[] preparePoints)
+        public GestureTemplate(string templateName, DollarPoint[] preparePoints)
         {
             Name = templateName;
             Points = preparePoints;
@@ -47,10 +51,23 @@ public class RecognitionManager : MonoBehaviour
         _templateModeButton.onClick.AddListener(() => SetupState(RecognizerState.TEMPLATE));
         _recognitionModeButton.onClick.AddListener(() => SetupState(RecognizerState.RECOGNITION));
         _reviewTemplates.onClick.AddListener(() => SetupState(RecognizerState.TEMPLATE_REVIEW));
+        _recognitionPanel.Initialize(SwitchRecognitionAlgorithm);
 
         SetupState(_state);
     }
 
+    private void SwitchRecognitionAlgorithm(int algorithm)
+    {
+        if (algorithm == 0)
+        {
+            _currentRecognizer = _dollarOneRecognizer;
+        }
+
+        if (algorithm == 1)
+        {
+            _currentRecognizer = _dollarPRecognizer;
+        }
+    }
 
     private void SetupState(RecognizerState state)
     {
@@ -63,22 +80,35 @@ public class RecognitionManager : MonoBehaviour
 
         _drawable.gameObject.SetActive(state != RecognizerState.TEMPLATE_REVIEW);
         _templateReviewPanel.SetVisibility(state == RecognizerState.TEMPLATE_REVIEW);
+        _recognitionPanel.SetVisibility(state == RecognizerState.RECOGNITION);
     }
 
-    private void OnDrawFinished(Vector2[] points)
+    private void OnDrawFinished(DollarPoint[] points)
     {
         if (_state == RecognizerState.TEMPLATE)
         {
             GestureTemplate preparedTemplate =
-                new GestureTemplate(TemplateName, _dollarOneRecognizer.PreparePoints(points, 64));
+                new GestureTemplate(TemplateName, _currentRecognizer.Normalize(points, 64));
             _templates.RawTemplates.Add(new GestureTemplate(TemplateName, points));
             _templates.ProceedTemplates.Add(preparedTemplate);
         }
         else
         {
-            (string, float) result = _dollarOneRecognizer.DoRecognition(points, 64, _templates.GetTemplates());
-            _recognitionResult.text = $"Recognized: {result.Item1}, Score: {result.Item2}";
-            Debug.Log($"Recognized: {result.Item1}, Score: {result.Item2}");
+            //  (string, float) result = _dollarOneRecognizer.DoRecognition(points, 64, _templates.GetTemplates());
+            (string, float) result = _currentRecognizer.DoRecognition(points, 64,
+                _templates.RawTemplates);
+            string resultText = "";
+            if (_currentRecognizer is DollarOneRecognizer)
+            {
+                resultText = $"Recognized: {result.Item1}, Score: {result.Item2}";
+            }
+            else if (_currentRecognizer is DollarPRecognizer)
+            {
+                resultText = $"Recognized: {result.Item1}, Distance: {result.Item2}";
+            }
+
+            _recognitionResult.text = resultText;
+            Debug.Log(resultText);
         }
     }
 
